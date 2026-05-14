@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projective Geometry Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; overflow: hidden; }
+        canvas { display: block; }
+
+        #info-bar {
+            position: fixed; bottom: 0; left: 50%;
+            transform: translateX(-50%);
+            max-width: 580px; width: 90%;
+            background: rgba(0,0,0,0.94);
+            border: 1px solid #333; border-bottom: none;
+            border-radius: 10px 10px 0 0;
+            z-index: 10; overflow: hidden;
+        }
+        #info-toggle {
+            padding: 10px 20px; cursor: pointer;
+            text-align: center; user-select: none;
+        }
+        #info-toggle span:first-child { color: #555; font-size: 13px; margin-right: 8px; }
+        #info-toggle .sub { color: #aaa; font: 500 16px 'EB Garamond', Georgia, serif; letter-spacing: 0.02em; }
+        #info-body { padding: 0 24px 18px; }
+        #info-body.collapsed { display: none; }
+        #preset-desc { color: #999; font: 16px/1.75 'EB Garamond', Georgia, serif; margin-bottom: 8px; }
+        #axiom-desc { color: #ccaa55; font: 16px/1.75 'EB Garamond', Georgia, serif; margin-bottom: 8px; }
+        #info-hints { color: #555; font: 13px 'EB Garamond', Georgia, serif; text-align: center; }
+
+        #controls {
+            position: fixed; top: 16px; right: 16px;
+            color: #888; font: 14px/2.2 'EB Garamond', Georgia, serif;
+            background: rgba(0,0,0,0.88); padding: 14px 18px;
+            border: 1px solid #222; z-index: 10; min-width: 240px;
+            user-select: none;
+        }
+        .row {
+            display: flex; align-items: center;
+            justify-content: space-between; gap: 10px;
+        }
+        .row span:first-child { min-width: 70px; }
+        .row input[type="range"] { flex: 1; accent-color: #555; }
+        .val {
+            min-width: 36px; text-align: right; color: #555;
+            font-variant-numeric: tabular-nums; font-size: 13px;
+        }
+        .check-label {
+            display: flex; align-items: center; gap: 6px; cursor: pointer;
+        }
+        .row input[type="checkbox"] { accent-color: #555; }
+        #reset {
+            cursor: pointer; color: #444; margin-top: 6px;
+            display: inline-block;
+        }
+        #reset:hover { color: #888; }
+
+        #labels {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 5;
+        }
+        .pt-label {
+            position: absolute;
+            color: #aaa;
+            font: italic 18px 'EB Garamond', Georgia, serif;
+        }
+        .line-label {
+            position: absolute;
+            color: #888;
+            font: italic 17px 'EB Garamond', Georgia, serif;
+        }
+        #c-preset, #c-axiom, #c-svg-btn {
+            width: 100%;
+            background: #111;
+            color: #999;
+            border: 1px solid #333;
+            font: 14px 'EB Garamond', Georgia, serif;
+            padding: 5px 6px;
+            cursor: pointer;
+        }
+        #c-preset:focus, #c-axiom:focus { outline: 1px solid #555; }
+        #c-svg-file { display: none; }
+        #c-svg-btn, #c-svg-fit { text-align: center; cursor: pointer; }
+        #c-svg-btn:hover, #c-svg-fit:hover { color: #ccc; border-color: #555; }
+        #c-svg-fit {
+            background: #111; color: #999; border: 1px solid #333;
+            font: 14px 'EB Garamond', Georgia, serif; padding: 5px 6px;
+        }
+        #c-svg-clear { color: #555; cursor: pointer; font-size: 12px; margin-left: 8px; }
+        #c-svg-clear:hover { color: #aaa; }
+        .axiom-label {
+            position: absolute;
+            color: #ccaa55;
+            font: italic 16px 'EB Garamond', Georgia, serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="info-bar">
+        <div id="info-toggle">
+            <span id="info-arrow">▼</span>
+            <span class="sub" id="preset-sub">Growth-Measure Net</span>
+        </div>
+        <div id="info-body">
+            <div id="preset-desc"></div>
+            <div id="axiom-desc"></div>
+            <div id="info-hints">drag centers · dbl-click add · right-click remove · pan · scroll zoom</div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <div class="row" style="margin-bottom:8px">
+            <select id="c-preset"></select>
+        </div>
+        <div class="row">
+            <span>ratio</span>
+            <input type="range" id="c-ratio" min="1.05" max="3.0" value="1.618" step="0.001">
+            <span class="val" id="v-ratio">&phi;</span>
+        </div>
+        <div class="row">
+            <span>steps</span>
+            <input type="range" id="c-ns" min="3" max="30" value="14" step="1">
+            <span class="val" id="v-ns">14</span>
+        </div>
+        <div class="row">
+            <span>base</span>
+            <input type="range" id="c-base" min="-30" max="5" value="-12" step="0.5">
+            <span class="val" id="v-base">-12</span>
+        </div>
+        <div class="row">
+            <span>extent</span>
+            <input type="range" id="c-ext" min="10" max="80" value="35" step="1">
+            <span class="val" id="v-ext">35</span>
+        </div>
+        <div class="row">
+            <span>bias</span>
+            <input type="range" id="c-bias" min="-5" max="5" value="0" step="0.1">
+            <span class="val" id="v-bias">0.0</span>
+        </div>
+        <div class="row" style="margin-top:4px">
+            <label class="check-label">
+                <input type="checkbox" id="c-diag" checked>
+                <span>quadrangle diagonals</span>
+            </label>
+        </div>
+        <div class="row">
+            <label class="check-label">
+                <input type="checkbox" id="c-dots" checked>
+                <span>intersections</span>
+            </label>
+        </div>
+        <div class="row">
+            <label class="check-label">
+                <input type="checkbox" id="c-curves">
+                <span>projective curves</span>
+            </label>
+        </div>
+        <div class="row">
+            <label class="check-label">
+                <input type="checkbox" id="c-labels" checked>
+                <span>labels</span>
+            </label>
+        </div>
+        <div class="row" style="margin-top:6px">
+            <span>axiom</span>
+            <select id="c-axiom">
+                <option value="none">none</option>
+                <option value="harmonic">Harmonic Set</option>
+                <option value="desargues">Desargues</option>
+                <option value="pascal">Pascal Line</option>
+            </select>
+        </div>
+        <div class="row" style="margin-top:6px">
+            <input type="file" id="c-svg-file" accept=".svg">
+            <button id="c-svg-btn" onclick="document.getElementById('c-svg-file').click()">upload SVG</button>
+            <span id="c-svg-clear" style="display:none" onclick="clearSVG()">✕ clear</span>
+        </div>
+        <div class="row" id="svg-dim-row" style="display:none">
+            <span>net dim</span>
+            <input type="range" id="c-net-dim" min="0" max="1" value="1" step="0.05">
+            <span class="val" id="v-net-dim">1.0</span>
+        </div>
+        <div class="row" id="svg-fit-row" style="display:none">
+            <button id="c-svg-fit" style="width:100%">find projective curves</button>
+        </div>
+        <div class="row" id="svg-fit-status" style="display:none">
+            <span id="fit-status" style="color:#ccaa55; font-size:12px"></span>
+        </div>
+        <div class="row">
+            <span id="reset">reset layout</span>
+        </div>
+    </div>
+
+    <div id="labels"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ── Projective geometry (P², homogeneous coordinates) ──
+
+    function cross([a0, a1, a2], [b0, b1, b2]) {
+        return [a1*b2 - a2*b1, a2*b0 - a0*b2, a0*b1 - a1*b0];
+    }
+
+    function dehom([x, y, w]) {
+        return Math.abs(w) < 1e-10 ? null : [x / w, y / w];
+    }
+
+    // Growth-measure on segment [a, b]:
+    //   projective parameter t = (x-a)/(b-x)
+    //   t_n = ratio^n, centered at t=1 (midpoint)
+    //   two limit points a,b act as the two infinitudes
+    function growthMeasure(a, b, ratio, n, bias = 0) {
+        const pts = [];
+        for (let i = -n; i <= n; i++) {
+            const t = ratio ** (i + bias);
+            const x = (a + b * t) / (1 + t);
+            if (x > a + 0.001 && x < b - 0.001) pts.push(x);
+        }
+        return pts;
+    }
+
+    // Densify a pencil by linear interpolation in homogeneous line space
+    function densifyPencil(hLines, res) {
+        if (hLines.length < 2) return [...hLines];
+        const out = [];
+        for (let k = 0; k < hLines.length - 1; k++) {
+            const [a0, a1, a2] = hLines[k];
+            const [b0, b1, b2] = hLines[k + 1];
+            for (let t = 0; t < res; t++) {
+                const f = t / res;
+                out.push([(1 - f) * a0 + f * b0, (1 - f) * a1 + f * b1, (1 - f) * a2 + f * b2]);
+            }
+        }
+        out.push(hLines[hLines.length - 1]);
+        return out;
+    }
+
+    // Clip line through (x1,y1)-(x2,y2) to box, extending infinitely
+    function clipLine(x1, y1, x2, y2, xn, yn, xx, yx) {
+        const dx = x2 - x1, dy = y2 - y1;
+        let lo = -500, hi = 500;
+        if (Math.abs(dx) > 1e-10) {
+            let t1 = (xn - x1) / dx, t2 = (xx - x1) / dx;
+            if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+            lo = Math.max(lo, t1); hi = Math.min(hi, t2);
+        } else if (x1 < xn || x1 > xx) return null;
+        if (Math.abs(dy) > 1e-10) {
+            let t1 = (yn - y1) / dy, t2 = (yx - y1) / dy;
+            if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+            lo = Math.max(lo, t1); hi = Math.min(hi, t2);
+        } else if (y1 < yn || y1 > yx) return null;
+        return lo < hi ? [x1 + lo*dx, y1 + lo*dy, x1 + hi*dx, y1 + hi*dy] : null;
+    }
+
+    // ── Presets ──
+
+    const PRESETS = [
+        {
+            name: 'Growth-Measure Net',
+            desc: 'Four centers weave pencils through growth-measure points — a logarithmic rhythm between two limit points Ω and Ω′. The net reveals how projective space organizes itself through proportion, not fixed distance.',
+            vps: [[-14, 17], [-5, 12], [2, 7], [12, 15]],
+            ratio: 1.618, steps: 14, base: -12, extent: 35, bias: 0,
+            diag: true, dots: true, curves: false, labels: true
+        },
+        {
+            name: 'Euclidean Limit',
+            desc: 'Centers pulled far from the base, ratio near 1. Growth-measure collapses into step-measure — the additive, equal-interval rhythm of Euclidean space. Ordinary geometry as a frozen special case.',
+            vps: [[-25, 70], [0, 75], [25, 70]],
+            ratio: 1.08, steps: 20, base: -15, extent: 40, bias: 0,
+            diag: true, dots: false, curves: false, labels: true
+        },
+        {
+            name: 'Breathing Involution',
+            desc: 'Symmetric centers generate rhythmic expansion toward the periphery and contraction toward the center. Whicher identified this pulsation in the metamorphosis of plant forms — the breathing quality of organic space.',
+            vps: [[-8, 22], [8, 22], [0, -2]],
+            ratio: 1.618, steps: 18, base: -14, extent: 30, bias: 0,
+            diag: true, dots: true, curves: true, labels: true
+        },
+        {
+            name: 'Organic Egg (Edwards)',
+            desc: 'Configuration after Lawrence Edwards. Symmetric upper centers and one below generate egg-shaped Steiner conics — the same geometry Edwards measured in bird eggs, flower buds, and pine cones.',
+            vps: [[-4, 28], [4, 28], [0, -18]],
+            ratio: 1.4, steps: 16, base: -8, extent: 25, bias: 0.5,
+            diag: false, dots: false, curves: true, labels: true
+        },
+        {
+            name: 'Vortex',
+            desc: 'Strong ratio and shifted bias produce spiral-like intersections. The logarithmic spiral is the path-curve of a projective transformation with complex invariant points.',
+            vps: [[-12, 12], [12, 12], [0, 30]],
+            ratio: 2.0, steps: 20, base: -15, extent: 35, bias: 2.5,
+            diag: true, dots: false, curves: true, labels: true
+        },
+        {
+            name: 'Peripheral Envelope',
+            desc: 'Five centers arrayed along the periphery, pressing inward. Whicher: formative forces are planar, working from the infinite outside toward the finite interior — form as a threshold carved by peripheral line-weaving.',
+            vps: [[-15, 20], [-7, 26], [0, 28], [7, 26], [15, 20]],
+            ratio: 1.618, steps: 12, base: -10, extent: 30, bias: 0,
+            diag: false, dots: true, curves: true, labels: true
+        },
+        {
+            name: 'Horizon Threshold (Kunze)',
+            desc: 'Base line raised to eye level becomes the horizon. Kunze: as our cone of vision dilates outward, an invisible counter-cone contracts into each vanishing point. The horizon is where expanding and contracting spatial forces equalize.',
+            vps: [[0, 35], [-22, 8], [22, 8]],
+            ratio: 1.618, steps: 14, base: 0, extent: 40, bias: 0,
+            diag: true, dots: true, curves: true, labels: true
+        },
+        {
+            name: 'Point-Line Duality',
+            desc: 'Two centers only — the minimal projective configuration. Every point-theorem has a line-theorem as its exact dual. The Steiner conics emerge where corresponding pencil lines cross.',
+            vps: [[-12, 20], [12, 20]],
+            ratio: 1.618, steps: 16, base: -12, extent: 35, bias: 0,
+            diag: true, dots: true, curves: true, labels: true
+        },
+    ];
+
+    // ── State ──
+
+    const state = {
+        vps: PRESETS[0].vps.map(p => [...p])
+    };
+
+    // ── Three.js ──
+
+    const scene = new THREE.Scene();
+    const FRUSTUM = 50;
+    const camera = new THREE.OrthographicCamera(
+        -FRUSTUM * innerWidth / innerHeight / 2, FRUSTUM * innerWidth / innerHeight / 2,
+        FRUSTUM / 2, -FRUSTUM / 2, 0.1, 100
+    );
+    camera.position.set(0, 2, 50);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+
+    const orbitCtrl = new OrbitControls(camera, renderer.domElement);
+    orbitCtrl.enableRotate = false;
+    orbitCtrl.screenSpacePanning = true;
+    orbitCtrl.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    orbitCtrl.enableDamping = true;
+    orbitCtrl.dampingFactor = 0.05;
+    orbitCtrl.minZoom = 0.15;
+    orbitCtrl.maxZoom = 10;
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    function $(id) { return document.getElementById(id); }
+
+    // ── Labels (projected world→screen each frame) ──
+    const labelEntries = [];
+
+    // ── Axiom helpers ──
+
+    const AXIOM_DESCS = {
+        none: '',
+        harmonic: 'Complete quadrangle ABCD and its diagonal triangle PQR. Line PQ is cut harmonically by sides AB and CD at points H, H′. The cross-ratio (P,Q;H,H′) = −1. This four-point relation is the atom of projective measurement.',
+        desargues: 'Triangles P₁P₂P₃ and Q₁Q₂Q₃ are in perspective from center O — corresponding vertices lie on lines through O. Desargues’ theorem: the three intersections of corresponding sides (X, Y, Z) are collinear. That line is the axis of perspectivity.',
+        pascal: 'Six points on a Steiner conic, connected as inscribed hexagon 1–2–3–4–5–6. Pascal’s theorem: the three intersections of opposite sides fall on a single straight line, the Pascal Line.',
+    };
+
+    function axLine(grp, x1, y1, x2, y2, color, opacity) {
+        const seg = clipLine(x1, y1, x2, y2, -1500, -1000, 1500, 1000);
+        if (!seg) return;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(
+            new Float32Array([seg[0], seg[1], 0, seg[2], seg[3], 0]), 3));
+        grp.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+            color, transparent: true, opacity, depthWrite: false
+        })));
+    }
+
+    function axPts(grp, pts, color, size) {
+        if (!pts.length) return;
+        const pos = new Float32Array(pts.length * 3);
+        pts.forEach((p, i) => { pos[i*3] = p[0]; pos[i*3+1] = p[1]; pos[i*3+2] = 0; });
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        grp.add(new THREE.Points(g, new THREE.PointsMaterial({ color, size, sizeAttenuation: false })));
+    }
+
+    function axLabel(lc, entries, text, wx, wy) {
+        const el = document.createElement('span');
+        el.className = 'axiom-label';
+        el.textContent = text;
+        lc.appendChild(el);
+        entries.push({ el, wx, wy, ox: 8, oy: -14 });
+    }
+
+    function drawHarmonicSet(grp, lc, entries) {
+        if (state.vps.length < 4) return;
+        const pts = state.vps.slice(0, 4);
+        const h = pts.map(p => [p[0], p[1], 1]);
+        const sides = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
+        const hS = sides.map(([i,j]) => cross(h[i], h[j]));
+
+        for (const [i, j] of sides)
+            axLine(grp, pts[i][0], pts[i][1], pts[j][0], pts[j][1], 0xddbb55, 0.8);
+
+        const P = dehom(cross(hS[0], hS[5]));
+        const Q = dehom(cross(hS[1], hS[4]));
+        const R = dehom(cross(hS[2], hS[3]));
+        if (!P || !Q || !R) return;
+
+        for (const [a, b] of [[P,Q],[Q,R],[P,R]])
+            axLine(grp, a[0], a[1], b[0], b[1], 0xee9955, 0.85);
+        axPts(grp, [P, Q, R], 0xffee66, 8);
+
+        const lPQ = cross([P[0], P[1], 1], [Q[0], Q[1], 1]);
+        const H1 = dehom(cross(lPQ, hS[0]));
+        const H2 = dehom(cross(lPQ, hS[5]));
+        if (H1 && H2) {
+            axPts(grp, [H1, H2], 0xff7744, 9);
+            axLabel(lc, entries, 'H', H1[0], H1[1]);
+            axLabel(lc, entries, 'H′', H2[0], H2[1]);
+        }
+        axLabel(lc, entries, 'P', P[0], P[1]);
+        axLabel(lc, entries, 'Q', Q[0], Q[1]);
+        axLabel(lc, entries, 'R', R[0], R[1]);
+    }
+
+    function drawDesargues(grp, lc, entries, base, baseY) {
+        if (state.vps.length < 3 || base.length < 5) return;
+        const bIdx = [Math.floor(base.length * 0.25), Math.floor(base.length * 0.5), Math.floor(base.length * 0.75)];
+        const hV = state.vps.slice(0, 3).map(v => [v[0], v[1], 1]);
+
+        const T1 = [], T2 = [];
+        for (const bi of bIdx) {
+            const hB = [base[bi], baseY, 1];
+            const p1 = dehom(cross(cross(hV[0], hB), cross(hV[1], hB)));
+            const p2 = dehom(cross(cross(hV[0], hB), cross(hV[2], hB)));
+            if (!p1 || !p2) return;
+            T1.push(p1); T2.push(p2);
+        }
+
+        for (let i = 0; i < 3; i++) {
+            const j = (i + 1) % 3;
+            axLine(grp, T1[i][0], T1[i][1], T1[j][0], T1[j][1], 0xddbb55, 0.8);
+            axLine(grp, T2[i][0], T2[i][1], T2[j][0], T2[j][1], 0x88bbdd, 0.8);
+        }
+        for (let i = 0; i < 3; i++)
+            axLine(grp, T1[i][0], T1[i][1], T2[i][0], T2[i][1], 0x888877, 0.5);
+
+        axPts(grp, T1, 0xffee66, 8);
+        axPts(grp, T2, 0x99ccee, 8);
+
+        const hT1 = T1.map(p => [p[0], p[1], 1]);
+        const hT2 = T2.map(p => [p[0], p[1], 1]);
+        const axPtsArr = [];
+        for (let i = 0; i < 3; i++) {
+            const j = (i + 1) % 3;
+            const p = dehom(cross(cross(hT1[i], hT1[j]), cross(hT2[i], hT2[j])));
+            if (p) axPtsArr.push(p);
+        }
+
+        if (axPtsArr.length >= 2) {
+            axLine(grp, axPtsArr[0][0], axPtsArr[0][1],
+                   axPtsArr[axPtsArr.length-1][0], axPtsArr[axPtsArr.length-1][1], 0xff9955, 0.9);
+            axPts(grp, axPtsArr, 0xffee66, 9);
+        }
+        axPts(grp, [[state.vps[0][0], state.vps[0][1]]], 0xff7744, 10);
+
+        const names1 = ['P₁','P₂','P₃'], names2 = ['Q₁','Q₂','Q₃'];
+        for (let i = 0; i < 3; i++) {
+            axLabel(lc, entries, names1[i], T1[i][0], T1[i][1]);
+            axLabel(lc, entries, names2[i], T2[i][0], T2[i][1]);
+        }
+        const axN = ['X','Y','Z'];
+        for (let i = 0; i < axPtsArr.length; i++)
+            axLabel(lc, entries, axN[i], axPtsArr[i][0], axPtsArr[i][1]);
+        axLabel(lc, entries, 'O', state.vps[0][0], state.vps[0][1]);
+    }
+
+    function drawPascalLine(grp, lc, entries, ratio, baseY, extent) {
+        if (state.vps.length < 2) return;
+        const vpA = state.vps[0], vpB = state.vps[1];
+        const ea = -extent, eb = extent, ss = 4;
+        if (Math.abs(vpA[1] - baseY) < 0.1) return;
+
+        const aR = Math.atan2(baseY - vpA[1], eb - vpA[0]);
+        const aL = Math.atan2(baseY - vpA[1], ea - vpA[0]);
+        const cPts = [];
+
+        for (let i = 0; i < 6; i++) {
+            const frac = 0.1 + 0.8 * i / 5;
+            const th = aR + (aL - aR) * frac;
+            const st = Math.sin(th), ct = Math.cos(th);
+            if (Math.abs(st) < 1e-10) continue;
+            const xs = vpA[0] + (baseY - vpA[1]) * ct / st;
+            const d1 = eb - xs;
+            if (Math.abs(d1) < 0.001) continue;
+            const ts = (xs - ea) / d1;
+            const td = ts * (ratio ** ss);
+            if (Math.abs(1 + td) < 1e-8) continue;
+            const xd = (ea + eb * td) / (1 + td);
+            const lS = [st, -ct, ct * vpA[1] - st * vpA[0]];
+            const thD = Math.atan2(baseY - vpB[1], xd - vpB[0]);
+            const stD = Math.sin(thD), ctD = Math.cos(thD);
+            const lD = [stD, -ctD, ctD * vpB[1] - stD * vpB[0]];
+            const p = dehom(cross(lS, lD));
+            if (p && Math.abs(p[0]) < 400 && Math.abs(p[1]) < 250) cPts.push(p);
+        }
+        if (cPts.length < 6) return;
+
+        for (let i = 0; i < 6; i++) {
+            const j = (i + 1) % 6;
+            axLine(grp, cPts[i][0], cPts[i][1], cPts[j][0], cPts[j][1], 0xddbb55, 0.8);
+        }
+        axPts(grp, cPts, 0xffee66, 8);
+
+        const hC = cPts.map(p => [p[0], p[1], 1]);
+        const side = (a, b) => cross(hC[a], hC[b]);
+        const pairs = [[0,1,3,4],[1,2,4,5],[2,3,5,0]];
+        const pPts = [];
+        for (const [a, b, c, d] of pairs) {
+            const p = dehom(cross(side(a, b), side(c, d)));
+            if (p) pPts.push(p);
+        }
+        if (pPts.length >= 2) {
+            axLine(grp, pPts[0][0], pPts[0][1],
+                   pPts[pPts.length-1][0], pPts[pPts.length-1][1], 0xff9955, 0.9);
+            axPts(grp, pPts, 0xff7744, 9);
+        }
+        for (let i = 0; i < 6; i++)
+            axLabel(lc, entries, (i+1).toString(), cPts[i][0], cPts[i][1]);
+        const pN = ['X','Y','Z'];
+        for (let i = 0; i < pPts.length; i++)
+            axLabel(lc, entries, pN[i], pPts[i][0], pPts[i][1]);
+    }
+
+    // ── SVG upload + projective warp ──
+
+    const svgState = { paths: [], bbox: null, anchors: null, refAnchors: null, bboxAnchors: null, fitted: false, fitVps: null, fitScale: 20, cachedPaths: null };
+
+    function parseSVG(svgText) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgText, 'image/svg+xml');
+        const svg = doc.querySelector('svg');
+        if (!svg) return null;
+
+        const paths = [];
+        const allPts = [];
+
+        for (const el of svg.querySelectorAll('path, polygon, polyline, rect, circle, ellipse, line')) {
+            const pts = sampleElement(el, svg);
+            if (pts.length >= 2) {
+                paths.push(pts);
+                allPts.push(...pts);
+            }
+        }
+
+        if (!allPts.length) return null;
+
+        let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+        for (const [x, y] of allPts) {
+            if (x < xMin) xMin = x;
+            if (x > xMax) xMax = x;
+            if (y < yMin) yMin = y;
+            if (y > yMax) yMax = y;
+        }
+
+        return { paths, bbox: [xMin, yMin, xMax, yMax] };
+    }
+
+    function sampleElement(el, svg) {
+        const tag = el.tagName.toLowerCase();
+        const pts = [];
+
+        if (tag === 'rect') {
+            const x = +el.getAttribute('x') || 0, y = +el.getAttribute('y') || 0;
+            const w = +el.getAttribute('width'), h = +el.getAttribute('height');
+            return [[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]];
+        }
+        if (tag === 'circle') {
+            const cx = +el.getAttribute('cx') || 0, cy = +el.getAttribute('cy') || 0;
+            const r = +el.getAttribute('r') || 0;
+            for (let i = 0; i <= 64; i++) {
+                const a = (i / 64) * Math.PI * 2;
+                pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+            }
+            return pts;
+        }
+        if (tag === 'ellipse') {
+            const cx = +el.getAttribute('cx') || 0, cy = +el.getAttribute('cy') || 0;
+            const rx = +el.getAttribute('rx') || 0, ry = +el.getAttribute('ry') || 0;
+            for (let i = 0; i <= 64; i++) {
+                const a = (i / 64) * Math.PI * 2;
+                pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+            }
+            return pts;
+        }
+        if (tag === 'line') {
+            return [[+el.getAttribute('x1'),+el.getAttribute('y1')],
+                    [+el.getAttribute('x2'),+el.getAttribute('y2')]];
+        }
+        if (tag === 'polygon' || tag === 'polyline') {
+            const raw = el.getAttribute('points') || '';
+            const nums = raw.trim().split(/[\s,]+/).map(Number);
+            for (let i = 0; i < nums.length - 1; i += 2) pts.push([nums[i], nums[i+1]]);
+            if (tag === 'polygon' && pts.length > 1) pts.push([...pts[0]]);
+            return pts;
+        }
+        if (tag === 'path') {
+            try {
+                const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                tempPath.setAttribute('d', el.getAttribute('d'));
+                tempSvg.appendChild(tempPath);
+                document.body.appendChild(tempSvg);
+                const len = tempPath.getTotalLength();
+                const step = Math.max(0.5, len / 500);
+                for (let d = 0; d <= len; d += step) {
+                    const p = tempPath.getPointAtLength(d);
+                    pts.push([p.x, p.y]);
+                }
+                const pEnd = tempPath.getPointAtLength(len);
+                pts.push([pEnd.x, pEnd.y]);
+                document.body.removeChild(tempSvg);
+            } catch (e) {}
+            return pts;
+        }
+        return pts;
+    }
+
+    function normalizeSVGPaths(parsed, scale) {
+        const [xMin, yMin, xMax, yMax] = parsed.bbox;
+        const w = xMax - xMin || 1, h = yMax - yMin || 1;
+        const cx = (xMin + xMax) / 2, cy = (yMin + yMax) / 2;
+        const s = scale / Math.max(w, h);
+        return parsed.paths.map(path =>
+            path.map(([x, y]) => [(x - cx) * s, -(y - cy) * s])
+        );
+    }
+
+    function computeHomography(src, dst) {
+        // 4-point homography: src[i] → dst[i]
+        // Solves 8×8 linear system for 3×3 matrix H (h33=1)
+        const A = [];
+        for (let i = 0; i < 4; i++) {
+            const [sx, sy] = src[i], [dx, dy] = dst[i];
+            A.push([sx, sy, 1, 0, 0, 0, -dx*sx, -dx*sy, dx]);
+            A.push([0, 0, 0, sx, sy, 1, -dy*sx, -dy*sy, dy]);
+        }
+        // Gaussian elimination on 8×9 augmented matrix
+        const M = A.map(r => [...r]);
+        for (let col = 0; col < 8; col++) {
+            let maxR = col;
+            for (let r = col + 1; r < 8; r++)
+                if (Math.abs(M[r][col]) > Math.abs(M[maxR][col])) maxR = r;
+            [M[col], M[maxR]] = [M[maxR], M[col]];
+            if (Math.abs(M[col][col]) < 1e-12) return null;
+            for (let r = 0; r < 8; r++) {
+                if (r === col) continue;
+                const f = M[r][col] / M[col][col];
+                for (let c = col; c < 9; c++) M[r][c] -= f * M[col][c];
+            }
+        }
+        const h = [];
+        for (let i = 0; i < 8; i++) h.push(M[i][8] / M[i][i]);
+        h.push(1);
+        return [h[0],h[1],h[2], h[3],h[4],h[5], h[6],h[7],h[8]];
+    }
+
+    function applyHomography(H, x, y) {
+        const w = H[6]*x + H[7]*y + H[8];
+        if (Math.abs(w) < 1e-10) return null;
+        return [(H[0]*x + H[1]*y + H[2]) / w, (H[3]*x + H[4]*y + H[5]) / w];
+    }
+
+    function getGridAnchors() { return getGridAnchorsFor(state.vps); }
+
+    function getGridAnchorsFor(vps) {
+        const n = vps.length;
+        if (n < 2) return null;
+        const baseY = +$('c-base').value;
+        const extent = +$('c-ext').value;
+        const ratio = +$('c-ratio').value;
+        const bias = +$('c-bias').value;
+        const numSteps = +$('c-ns').value;
+        const base = growthMeasure(-extent, extent, ratio, numSteps, bias);
+        if (base.length < 2) return null;
+        const b0 = base[Math.floor(base.length * 0.25)];
+        const b1 = base[Math.floor(base.length * 0.75)];
+        const hB0 = [b0, baseY, 1], hB1 = [b1, baseY, 1];
+        const hV = vps.map(v => [v[0], v[1], 1]);
+        const vpL = (vi, hB) => cross(hV[vi], hB);
+        const meet = (a, b) => dehom(cross(a, b));
+        let tl, tr, br, bl;
+        if (n === 2) {
+            tl = meet(vpL(0,hB0), vpL(1,hB0)); tr = meet(vpL(0,hB1), vpL(1,hB0));
+            br = meet(vpL(0,hB1), vpL(1,hB1)); bl = meet(vpL(0,hB0), vpL(1,hB1));
+        } else if (n === 3) {
+            tl = meet(vpL(0,hB0), vpL(2,hB0)); tr = meet(vpL(1,hB0), vpL(2,hB1));
+            br = meet(vpL(1,hB1), vpL(0,hB1)); bl = meet(vpL(0,hB0), vpL(1,hB1));
+        } else {
+            tl = meet(vpL(0,hB0), vpL(2,hB0)); tr = meet(vpL(1,hB1), vpL(2,hB1));
+            br = meet(vpL(1,hB1), vpL(3,hB1)); bl = meet(vpL(0,hB0), vpL(3,hB0));
+        }
+        if (!tl || !tr || !br || !bl) return null;
+        return [tl, tr, br, bl];
+    }
+
+    function vpAnchors() {
+        const n = state.vps.length;
+        if (n < 2) return null;
+        if (n === 2) {
+            const [ax, ay] = state.vps[0], [bx, by] = state.vps[1];
+            const mx = (ax + bx) / 2, my = (ay + by) / 2;
+            const dx = bx - ax, dy = by - ay;
+            const len = Math.sqrt(dx*dx + dy*dy) || 1;
+            const nx = -dy / len * len * 0.5, ny = dx / len * len * 0.5;
+            return [[ax, ay], [bx, by], [bx + nx, by + ny], [ax + nx, ay + ny]];
+        }
+        if (n === 3) {
+            const [ax,ay] = state.vps[0], [bx,by] = state.vps[1], [cx,cy] = state.vps[2];
+            const dx = ax + bx - cx, dy = ay + by - cy;
+            return [[ax, ay], [bx, by], [cx, cy], [dx, dy]];
+        }
+        return [state.vps[0], state.vps[1], state.vps[2], state.vps[3]];
+    }
+
+    function drawSVGWarp(grp) {
+        if (!svgState.raw) return;
+
+        if (!svgState.cachedPaths) {
+            svgState.cachedPaths = normalizeSVGPaths(svgState.raw, svgState.fitScale);
+        }
+
+        let H = null;
+        if (svgState.bboxAnchors) {
+            const dst = vpAnchors();
+            if (dst) H = computeHomography(svgState.bboxAnchors, dst);
+        }
+
+        for (const path of svgState.cachedPaths) {
+            const warped = [];
+            for (const [x, y] of path) {
+                const p = H ? applyHomography(H, x, y) : [x, y];
+                if (p && Math.abs(p[0]) < 1500 && Math.abs(p[1]) < 1000) warped.push(p);
+            }
+            if (warped.length < 2) continue;
+
+            const runs = [[]];
+            for (let i = 0; i < warped.length; i++) {
+                const cur = runs[runs.length - 1];
+                if (cur.length > 0) {
+                    const lp = cur[cur.length - 1];
+                    const dx = warped[i][0] - lp[0], dy = warped[i][1] - lp[1];
+                    if (dx*dx + dy*dy > 2000) { runs.push([]); }
+                }
+                runs[runs.length - 1].push(warped[i]);
+            }
+
+            for (const run of runs) {
+                if (run.length < 2) continue;
+                const pos = new Float32Array(run.length * 3);
+                for (let k = 0; k < run.length; k++) {
+                    pos[k*3] = run[k][0]; pos[k*3+1] = run[k][1]; pos[k*3+2] = 0;
+                }
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                grp.add(new THREE.Line(geo, new THREE.LineBasicMaterial({
+                    color: 0xddccaa, transparent: true, opacity: 0.9, depthWrite: false
+                })));
+            }
+        }
+    }
+
+    function loadSVGFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const parsed = parseSVG(e.target.result);
+            if (!parsed) return;
+            svgState.raw = parsed;
+            svgState.bbox = parsed.bbox;
+            svgState.cachedPaths = null;
+            svgState.refAnchors = null;
+            svgState.bboxAnchors = null;
+            svgState.fitted = false;
+            $('c-svg-clear').style.display = 'inline';
+            $('svg-dim-row').style.display = 'flex';
+            $('svg-fit-row').style.display = 'flex';
+            rebuild();
+        };
+        reader.readAsText(file);
+    }
+
+    function clearSVG() {
+        svgState.paths = [];
+        svgState.raw = null;
+        svgState.bbox = null;
+        svgState.anchors = null;
+        svgState.refAnchors = null;
+        svgState.bboxAnchors = null;
+        svgState.fitVps = null;
+        svgState.fitted = false;
+        svgState.cachedPaths = null;
+        $('c-svg-clear').style.display = 'none';
+        $('svg-dim-row').style.display = 'none';
+        $('svg-fit-row').style.display = 'none';
+        $('svg-fit-status').style.display = 'none';
+        rebuild();
+    }
+
+    // ── Projective curve fitting ──
+
+    function sampleSteinerCurve(src, dst, ratio, baseY, extent, ss, count) {
+        const ea = -extent, eb = extent;
+        if (Math.abs(src[1] - baseY) < 0.1) return [];
+        const aR = Math.atan2(baseY - src[1], eb - src[0]);
+        const aL = Math.atan2(baseY - src[1], ea - src[0]);
+        const span = aL - aR;
+        const aRe = aR - span * 1.0, aLe = aL + span * 1.0;
+        const pts = [];
+        for (let i = 0; i < count; i++) {
+            const th = aRe + (aLe - aRe) * i / (count - 1);
+            const st = Math.sin(th), ct = Math.cos(th);
+            if (Math.abs(st) < 1e-10) continue;
+            const xs = src[0] + (baseY - src[1]) * ct / st;
+            const d1 = eb - xs;
+            if (Math.abs(d1) < 0.001) continue;
+            const ts = (xs - ea) / d1;
+            const td = ts * (ratio ** ss);
+            if (Math.abs(1 + td) < 1e-8) continue;
+            const xd = (ea + eb * td) / (1 + td);
+            const lS = [st, -ct, ct * src[1] - st * src[0]];
+            const thD = Math.atan2(baseY - dst[1], xd - dst[0]);
+            const stD = Math.sin(thD), ctD = Math.cos(thD);
+            const lD = [stD, -ctD, ctD * dst[1] - stD * dst[0]];
+            const p = dehom(cross(lS, lD));
+            if (p && Math.abs(p[0]) < 500 && Math.abs(p[1]) < 500) pts.push(p);
+        }
+        return pts;
+    }
+
+    function curveToSVGDistance(curvePts, svgPts) {
+        if (!curvePts.length) return Infinity;
+        let total = 0;
+        for (const [sx, sy] of svgPts) {
+            let minD = Infinity;
+            for (const [cx, cy] of curvePts) {
+                const d = (sx - cx) ** 2 + (sy - cy) ** 2;
+                if (d < minD) minD = d;
+            }
+            total += Math.sqrt(minD);
+        }
+        return total / svgPts.length;
+    }
+
+    function fitScore(vps, ratio, baseY, extent, shifts, svgPts) {
+        const allCurve = [];
+        for (let i = 0; i < vps.length; i++) {
+            for (let j = i + 1; j < vps.length; j++) {
+                for (const ss of shifts) {
+                    for (const [src, dst] of [[vps[i], vps[j]], [vps[j], vps[i]]]) {
+                        const pts = sampleSteinerCurve(src, dst, ratio, baseY, extent, ss, 120);
+                        allCurve.push(...pts);
+                    }
+                }
+            }
+        }
+        return curveToSVGDistance(allCurve, svgPts);
+    }
+
+    async function autoFitSVG() {
+        if (!svgState.raw) return;
+
+        const statusEl = $('fit-status');
+        $('svg-fit-status').style.display = 'flex';
+        statusEl.textContent = 'searching...';
+
+        const fitScale = 20;
+        const fitPaths = normalizeSVGPaths(svgState.raw, fitScale);
+        const svgPts = [];
+        for (const path of fitPaths) {
+            const step = Math.max(1, Math.floor(path.length / 40));
+            for (let i = 0; i < path.length; i += step) svgPts.push(path[i]);
+        }
+        if (!svgPts.length) { statusEl.textContent = 'no contour points'; return; }
+
+        const baseY = +$('c-base').value;
+        const extent = +$('c-ext').value;
+
+        let bestScore = Infinity, bestConfig = null;
+        const shiftSets = [
+            [1, 3, 6], [2, 5, 10], [1.5, 4, 8, 14], [1, 2, 4, 8, 12, 18]
+        ];
+        const ratios = [1.2, 1.4, 1.618, 2.0, 2.5, 3.0];
+
+        await new Promise(r => setTimeout(r, 50));
+
+        for (let nVps = 2; nVps <= 4; nVps++) {
+            for (let trial = 0; trial < 80; trial++) {
+                const vps = [];
+                for (let v = 0; v < nVps; v++) {
+                    const above = Math.random() > 0.2;
+                    vps.push([
+                        (Math.random() - 0.5) * 60,
+                        above ? baseY + 3 + Math.random() * 50 : baseY - 3 - Math.random() * 35
+                    ]);
+                }
+                for (const ratio of ratios) {
+                    for (const shifts of shiftSets) {
+                        const score = fitScore(vps, ratio, baseY, extent, shifts, svgPts);
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestConfig = { vps: vps.map(v => [...v]), ratio, shifts: [...shifts], nVps };
+                        }
+                    }
+                }
+
+                if (trial % 20 === 19) {
+                    statusEl.textContent = `searching ${nVps} centers... (${trial + 1}/80)`;
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+        }
+
+        if (!bestConfig) { statusEl.textContent = 'no fit found'; return; }
+
+        statusEl.textContent = 'refining...';
+        await new Promise(r => setTimeout(r, 10));
+
+        for (let temp = 5.0; temp > 0.05; temp *= 0.9) {
+            for (let step = 0; step < 20; step++) {
+                const candidate = bestConfig.vps.map(v => [
+                    v[0] + (Math.random() - 0.5) * temp * 2,
+                    v[1] + (Math.random() - 0.5) * temp * 2
+                ]);
+                const rCand = bestConfig.ratio + (Math.random() - 0.5) * temp * 0.05;
+                if (rCand < 1.05) continue;
+                const score = fitScore(candidate, rCand, baseY, extent, bestConfig.shifts, svgPts);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestConfig.vps = candidate;
+                    bestConfig.ratio = rCand;
+                }
+            }
+            for (const shifts of shiftSets) {
+                const score = fitScore(bestConfig.vps, bestConfig.ratio, baseY, extent, shifts, svgPts);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestConfig.shifts = [...shifts];
+                }
+            }
+        }
+
+        state.vps = bestConfig.vps;
+        svgState.fitVps = bestConfig.vps.map(v => [...v]);
+        svgState.fitScale = fitScale;
+        svgState.cachedPaths = normalizeSVGPaths(svgState.raw, fitScale);
+        svgState.fitted = true;
+
+        const [bx0, by0, bx1, by1] = svgState.raw.bbox;
+        const bw = bx1 - bx0 || 1, bh = by1 - by0 || 1;
+        const bmax = Math.max(bw, bh);
+        const hw = fitScale * bw / (2 * bmax), hh = fitScale * bh / (2 * bmax);
+        svgState.bboxAnchors = [[-hw, hh], [hw, hh], [hw, -hh], [-hw, -hh]];
+
+        $('c-ratio').value = bestConfig.ratio;
+        $('v-ratio').textContent = Math.abs(bestConfig.ratio - 1.618) < 0.01 ? 'φ' : bestConfig.ratio.toFixed(2);
+        $('c-curves').checked = true;
+        rebuild();
+
+        const r = bestConfig.ratio;
+        const nC = bestConfig.nVps;
+        const phi = 1.618;
+
+        let measureType = r < 1.15 ? 'step-measure (near-Euclidean, rigid)' :
+                          r < 1.5  ? 'mild growth-measure (gentle organic rhythm)' :
+                          Math.abs(r - phi) < 0.08 ? 'golden growth-measure (φ = 1.618, living proportion)' :
+                          r < 2.2  ? 'strong growth-measure (pronounced asymmetry)' :
+                                     'extreme growth-measure (vortical, spiraling)';
+
+        let formQuality = nC === 2 ? 'single-axis polarity — the form lives between two poles' :
+                          nC === 3 ? 'triangular polarity — three forces converge to shape the form' :
+                                     'quadrilateral polarity — four peripheral forces enclose and mold the form';
+
+        const vpSpread = [];
+        for (let i = 0; i < bestConfig.vps.length; i++)
+            for (let j = i+1; j < bestConfig.vps.length; j++) {
+                const dx = bestConfig.vps[i][0] - bestConfig.vps[j][0];
+                const dy = bestConfig.vps[i][1] - bestConfig.vps[j][1];
+                vpSpread.push(Math.sqrt(dx*dx + dy*dy));
+            }
+        const avgSpread = vpSpread.reduce((a,b) => a+b, 0) / vpSpread.length;
+        const symmetry = vpSpread.length > 1 ?
+            (Math.max(...vpSpread) - Math.min(...vpSpread)) / avgSpread : 0;
+        let symDesc = symmetry < 0.3 ? 'high symmetry between centers' :
+                      symmetry < 0.7 ? 'moderate asymmetry — the form leans toward one pole' :
+                                        'strong asymmetry — one axis dominates';
+
+        const baseY_val = +$('c-base').value;
+        const aboveBase = bestConfig.vps.filter(v => v[1] > baseY_val).length;
+        const belowBase = bestConfig.vps.filter(v => v[1] <= baseY_val).length;
+        let spatial = aboveBase > 0 && belowBase > 0 ?
+            'centers span both sides of the horizon — the form breathes between above and below' :
+            aboveBase === nC ? 'all centers above the horizon — the form is drawn upward, peripheral' :
+                               'centers below the horizon — the form presses downward, centric';
+
+        $('axiom-desc').innerHTML = '';
+        const analysis = `<strong>Projective reading:</strong> ${measureType}. ` +
+            `${formQuality}. ${symDesc}. ${spatial}. ` +
+            `Ratio ${r.toFixed(3)}, ${nC} centers, fit score ${bestScore.toFixed(2)}.`;
+        $('preset-desc').innerHTML = analysis;
+        $('info-body').classList.remove('collapsed');
+        $('info-arrow').textContent = '▼';
+
+        statusEl.textContent = `fit: ${nC} centers, ratio ${r.toFixed(2)}, score ${bestScore.toFixed(1)}`;
+    }
+
+    // ── Construction + Rendering ──
+
+    function rebuild() {
+        group.clear();
+
+        const ratio    = +$('c-ratio').value;
+        const numSteps = +$('c-ns').value;
+        const baseY    = +$('c-base').value;
+        const extent   = +$('c-ext').value;
+        const bias     = +$('c-bias').value;
+        const showDiag = $('c-diag').checked;
+        const showDots = $('c-dots').checked;
+        const netDim   = svgState.raw ? +$('c-net-dim').value : 1;
+        $('v-net-dim').textContent = netDim.toFixed(1);
+
+        const CLIP = [-400, -250, 400, 250];
+        const DIAG_BOUND = 250;
+
+        // Growth-measure base points
+        const base = growthMeasure(-extent, extent, ratio, numSteps, bias);
+
+        // Build pencils from each VP through base points
+        const segs = [];
+        const pencilH = [];
+
+        for (const [vx, vy] of state.vps) {
+            const hLines = [];
+            for (const bx of base) {
+                const c = clipLine(vx, vy, bx, baseY, ...CLIP);
+                if (c) {
+                    segs.push(c);
+                    hLines.push(cross([vx, vy, 1], [bx, baseY, 1]));
+                }
+            }
+            pencilH.push(hLines);
+        }
+
+        // ── Pencil lines (additive blending: overlap = brightness) ──
+        if (segs.length) {
+            const pos = new Float32Array(segs.length * 6);
+            for (let i = 0; i < segs.length; i++)
+                pos.set([segs[i][0], segs[i][1], 0, segs[i][2], segs[i][3], 0], i * 6);
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+                color: 0xffffff, transparent: true, opacity: 0.35 * netDim,
+                blending: THREE.AdditiveBlending, depthWrite: false
+            })));
+        }
+
+        // ── Quadrangle diagonals (all pencil pairs) ──
+        if (showDiag && pencilH.length > 1) {
+            const dSegs = [];
+            const inB = ([x, y]) =>
+                Math.abs(x) < DIAG_BOUND && Math.abs(y) < DIAG_BOUND * 0.8;
+
+            for (let i = 0; i < pencilH.length; i++) {
+                for (let j = i + 1; j < pencilH.length; j++) {
+                    const pA = pencilH[i], pB = pencilH[j];
+                    if (!pA.length || !pB.length) continue;
+                    const grid = [];
+                    for (let k = 0; k < pA.length; k++) {
+                        grid[k] = [];
+                        for (let l = 0; l < pB.length; l++)
+                            grid[k][l] = dehom(cross(pA[k], pB[l]));
+                    }
+                    for (let k = 0; k < pA.length - 1; k++) {
+                        for (let l = 0; l < pB.length - 1; l++) {
+                            const a = grid[k][l], b = grid[k+1][l+1];
+                            const c = grid[k+1][l], d = grid[k][l+1];
+                            if (a && b && inB(a) && inB(b))
+                                dSegs.push(a[0], a[1], 0, b[0], b[1], 0);
+                            if (c && d && inB(c) && inB(d))
+                                dSegs.push(c[0], c[1], 0, d[0], d[1], 0);
+                        }
+                    }
+                }
+            }
+
+            if (dSegs.length) {
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(dSegs), 3));
+                group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+                    color: 0xffffff, transparent: true, opacity: 0.08 * netDim,
+                    blending: THREE.AdditiveBlending, depthWrite: false
+                })));
+            }
+        }
+
+        // ── Intersection points ──
+        if (showDots) {
+            const dots = [];
+            for (let i = 0; i < pencilH.length; i++)
+                for (let j = i + 1; j < pencilH.length; j++)
+                    for (const la of pencilH[i])
+                        for (const lb of pencilH[j]) {
+                            const p = dehom(cross(la, lb));
+                            if (p && Math.abs(p[0]) < 350 && Math.abs(p[1]) < 220)
+                                dots.push(p[0], p[1], 0);
+                        }
+            if (dots.length) {
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(dots), 3));
+                group.add(new THREE.Points(geo, new THREE.PointsMaterial({
+                    color: 0xffffff, size: 1.5, sizeAttenuation: false,
+                    transparent: true, opacity: 0.2 * netDim,
+                    blending: THREE.AdditiveBlending, depthWrite: false
+                })));
+            }
+        }
+
+        // ── Projective curves (Steiner conics via angle-parametric sampling) ──
+        // For each VP pair, uniformly sample angles from the source pencil,
+        // map through the growth-measure projectivity (with a shift), and
+        // intersect with the corresponding line from the destination pencil.
+        if ($('c-curves').checked && state.vps.length >= 2) {
+            const CN = 500, CX = 1500, CY = 1000;
+            const ea = -extent, eb = extent;
+
+            for (let i = 0; i < state.vps.length; i++) {
+                for (let j = i + 1; j < state.vps.length; j++) {
+                    for (const ss of [1.5, 4, 8, 14]) {
+                        for (const [src, dst] of [[state.vps[i], state.vps[j]], [state.vps[j], state.vps[i]]]) {
+                            if (Math.abs(src[1] - baseY) < 0.1) continue;
+
+                            const aR = Math.atan2(baseY - src[1], eb - src[0]);
+                            const aL = Math.atan2(baseY - src[1], ea - src[0]);
+                            const span = aL - aR;
+                            const aRe = aR - span * 1.0;
+                            const aLe = aL + span * 1.0;
+                            const runs = [];
+                            let run = [];
+
+                            for (let si = 0; si < CN; si++) {
+                                const th = aRe + (aLe - aRe) * si / (CN - 1);
+                                const st = Math.sin(th), ct = Math.cos(th);
+                                if (Math.abs(st) < 1e-10) continue;
+
+                                const xs = src[0] + (baseY - src[1]) * ct / st;
+                                const denom1 = eb - xs;
+                                if (Math.abs(denom1) < 0.001) continue;
+
+                                const ts = (xs - ea) / denom1;
+                                const td = ts * (ratio ** ss);
+                                if (Math.abs(1 + td) < 1e-8) continue;
+                                const xd = (ea + eb * td) / (1 + td);
+
+                                const lS = [st, -ct, ct * src[1] - st * src[0]];
+                                const thD = Math.atan2(baseY - dst[1], xd - dst[0]);
+                                const stD = Math.sin(thD), ctD = Math.cos(thD);
+                                const lD = [stD, -ctD, ctD * dst[1] - stD * dst[0]];
+                                const p = dehom(cross(lS, lD));
+
+                                if (p && Math.abs(p[0]) < CX && Math.abs(p[1]) < CY) {
+                                    const rl = run.length;
+                                    if (rl >= 2) {
+                                        const pp = run[rl - 2], lp = run[rl - 1];
+                                        const dx1 = lp[0] - pp[0], dy1 = lp[1] - pp[1];
+                                        const dx2 = p[0] - lp[0], dy2 = p[1] - lp[1];
+                                        const dot = dx1*dx2 + dy1*dy2;
+                                        const cr = dx1*dy2 - dy1*dx2;
+                                        if (Math.abs(Math.atan2(cr, dot)) > 2.2) {
+                                            run.pop();
+                                            if (run.length >= 2) runs.push(run);
+                                            run = [p];
+                                            continue;
+                                        }
+                                    }
+                                    run.push(p);
+                                } else {
+                                    if (run.length >= 2) runs.push(run);
+                                    run = [];
+                                }
+                            }
+                            if (run.length >= 2) runs.push(run);
+
+                            for (const r of runs) {
+                                const pts = new Float32Array(r.length * 3);
+                                for (let k = 0; k < r.length; k++) {
+                                    pts[k * 3] = r[k][0];
+                                    pts[k * 3 + 1] = r[k][1];
+                                    pts[k * 3 + 2] = 0;
+                                }
+                                const geo = new THREE.BufferGeometry();
+                                geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+                                group.add(new THREE.Line(geo, new THREE.LineBasicMaterial({
+                                    color: 0x7799cc, transparent: true, opacity: 0.85 * netDim,
+                                    depthWrite: false
+                                })));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Base line (faint guide) ──
+        {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(
+                new Float32Array([-5000, baseY, 0, 5000, baseY, 0]), 3
+            ));
+            group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+                color: 0xffffff, transparent: true, opacity: 0.08 * netDim
+            })));
+        }
+
+        // ── VP markers (bright, interactive) ──
+        {
+            const pos = new Float32Array(state.vps.length * 3);
+            state.vps.forEach(([x, y], i) => pos.set([x, y, 0], i * 3));
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            group.add(new THREE.Points(geo, new THREE.PointsMaterial({
+                color: 0xffffff, size: 6, sizeAttenuation: false
+            })));
+        }
+
+        // ── SVG warp ──
+        drawSVGWarp(group);
+
+        // ── Update slider readouts ──
+        $('v-ratio').textContent = Math.abs(ratio - 1.618) < 0.01 ? 'φ' : ratio.toFixed(2);
+        $('v-ns').textContent = numSteps;
+        $('v-base').textContent = baseY;
+        $('v-ext').textContent = extent;
+        $('v-bias').textContent = bias.toFixed(1);
+
+        // ── Projective labels ──
+        const lc = $('labels');
+        lc.innerHTML = '';
+        labelEntries.length = 0;
+        if ($('c-labels').checked) {
+            const vpNames = 'ABCDEFGHIJ';
+            for (let i = 0; i < state.vps.length; i++) {
+                const el = document.createElement('span');
+                el.className = 'pt-label';
+                el.textContent = vpNames[i] || '';
+                lc.appendChild(el);
+                labelEntries.push({ el, wx: state.vps[i][0], wy: state.vps[i][1], ox: 9, oy: -16 });
+            }
+            // Base line
+            const bl = document.createElement('span');
+            bl.className = 'line-label';
+            bl.textContent = 'ℓ';
+            lc.appendChild(bl);
+            labelEntries.push({ el: bl, wx: extent + 2, wy: baseY, ox: 4, oy: -14 });
+            // Limit points (the two infinitudes)
+            for (const [sym, lx] of [['Ω', -extent], ['Ω′', extent]]) {
+                const lp = document.createElement('span');
+                lp.className = 'line-label';
+                lp.textContent = sym;
+                lc.appendChild(lp);
+                labelEntries.push({ el: lp, wx: lx, wy: baseY, ox: -4, oy: 8 });
+            }
+        }
+
+        // ── Axiom overlays ──
+        const axiom = $('c-axiom').value;
+        $('axiom-desc').textContent = AXIOM_DESCS[axiom] || '';
+        if (axiom === 'harmonic') drawHarmonicSet(group, lc, labelEntries);
+        else if (axiom === 'desargues') drawDesargues(group, lc, labelEntries, base, baseY);
+        else if (axiom === 'pascal') drawPascalLine(group, lc, labelEntries, ratio, baseY, extent);
+    }
+
+    // ── Interaction: drag VPs ──
+
+    const zPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const raycaster = new THREE.Raycaster();
+    const mouseNDC = new THREE.Vector2();
+    let dragIndex = -1;
+
+    function mouseToWorld(ex, ey) {
+        mouseNDC.set((ex / innerWidth) * 2 - 1, -(ey / innerHeight) * 2 + 1);
+        raycaster.setFromCamera(mouseNDC, camera);
+        const target = new THREE.Vector3();
+        const hit = raycaster.ray.intersectPlane(zPlane, target);
+        if (!hit || Math.abs(target.x) > 300 || Math.abs(target.y) > 300) return null;
+        return target;
+    }
+
+    function hitTestVPs(ex, ey) {
+        for (let i = 0; i < state.vps.length; i++) {
+            const v = new THREE.Vector3(state.vps[i][0], state.vps[i][1], 0).project(camera);
+            const sx = (v.x + 1) / 2 * innerWidth;
+            const sy = (-v.y + 1) / 2 * innerHeight;
+            const dx = sx - ex, dy = sy - ey;
+            if (dx * dx + dy * dy < 300) return i; // ~17px hit radius
+        }
+        return -1;
+    }
+
+    // Capture-phase pointerdown intercepts before OrbitControls
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        const hit = hitTestVPs(e.clientX, e.clientY);
+        if (hit >= 0) {
+            e.stopPropagation();
+            dragIndex = hit;
+            orbitCtrl.enabled = false;
+            renderer.domElement.style.cursor = 'grabbing';
+        }
+    }, true);
+
+    renderer.domElement.addEventListener('pointermove', (e) => {
+        if (dragIndex >= 0) {
+            const pos = mouseToWorld(e.clientX, e.clientY);
+            if (pos) {
+                state.vps[dragIndex] = [pos.x, pos.y];
+                rebuild();
+            }
+        } else {
+            const hit = hitTestVPs(e.clientX, e.clientY);
+            renderer.domElement.style.cursor = hit >= 0 ? 'grab' : '';
+        }
+    });
+
+    window.addEventListener('pointerup', () => {
+        if (dragIndex >= 0) {
+            dragIndex = -1;
+            orbitCtrl.enabled = true;
+            renderer.domElement.style.cursor = '';
+        }
+    });
+
+    // Double-click to add VP
+    renderer.domElement.addEventListener('dblclick', (e) => {
+        if (hitTestVPs(e.clientX, e.clientY) >= 0) return;
+        const pos = mouseToWorld(e.clientX, e.clientY);
+        if (pos) {
+            state.vps.push([pos.x, pos.y]);
+            rebuild();
+        }
+    });
+
+    // Right-click VP to remove
+    renderer.domElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (state.vps.length <= 2) return;
+        const hit = hitTestVPs(e.clientX, e.clientY);
+        if (hit >= 0) {
+            state.vps.splice(hit, 1);
+            rebuild();
+        }
+    });
+
+    // ── Presets UI ──
+
+    const presetSel = $('c-preset');
+    PRESETS.forEach((p, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = p.name;
+        presetSel.appendChild(opt);
+    });
+
+    function loadPreset(idx) {
+        const p = PRESETS[idx];
+        state.vps = p.vps.map(v => [...v]);
+        $('c-ratio').value = p.ratio;
+        $('c-ns').value = p.steps;
+        $('c-base').value = p.base;
+        $('c-ext').value = p.extent;
+        $('c-bias').value = p.bias;
+        $('c-diag').checked = p.diag;
+        $('c-dots').checked = p.dots;
+        $('c-curves').checked = p.curves;
+        $('c-labels').checked = p.labels;
+        $('preset-sub').textContent = p.name;
+        $('preset-desc').textContent = p.desc;
+        rebuild();
+    }
+
+    presetSel.addEventListener('change', () => loadPreset(+presetSel.value));
+
+    // ── UI wiring ──
+
+    for (const input of document.querySelectorAll('#controls input'))
+        input.addEventListener('input', rebuild);
+
+    $('c-axiom').addEventListener('change', rebuild);
+
+    $('c-svg-fit').addEventListener('click', autoFitSVG);
+
+    $('c-svg-file').addEventListener('change', (e) => {
+        if (e.target.files[0]) loadSVGFile(e.target.files[0]);
+        e.target.value = '';
+    });
+
+    $('info-toggle').addEventListener('click', () => {
+        const body = $('info-body');
+        body.classList.toggle('collapsed');
+        $('info-arrow').textContent = body.classList.contains('collapsed') ? '▲' : '▼';
+    });
+
+    $('reset').addEventListener('click', () => {
+        loadPreset(+presetSel.value);
+    });
+
+    // ── Pan bounds ──
+    orbitCtrl.addEventListener('change', () => {
+        const hw = (camera.right - camera.left) / (2 * camera.zoom);
+        const hh = (camera.top - camera.bottom) / (2 * camera.zoom);
+        const mx = Math.max(0, 400 - hw);
+        const my = Math.max(0, 250 - hh);
+        const cx = THREE.MathUtils.clamp(orbitCtrl.target.x, -mx, mx);
+        const cy = THREE.MathUtils.clamp(orbitCtrl.target.y, -my, my);
+        const dx = cx - orbitCtrl.target.x;
+        const dy = cy - orbitCtrl.target.y;
+        if (dx !== 0 || dy !== 0) {
+            orbitCtrl.target.x = cx;
+            orbitCtrl.target.y = cy;
+            camera.position.x += dx;
+            camera.position.y += dy;
+        }
+    });
+
+    // ── Label position update ──
+    function updateLabelPositions() {
+        const v = new THREE.Vector3();
+        for (const ld of labelEntries) {
+            v.set(ld.wx, ld.wy, 0).project(camera);
+            ld.el.style.left = ((v.x + 1) / 2 * innerWidth + ld.ox) + 'px';
+            ld.el.style.top  = ((-v.y + 1) / 2 * innerHeight + ld.oy) + 'px';
+        }
+    }
+
+    // ── Animation ──
+
+    (function animate() {
+        requestAnimationFrame(animate);
+        orbitCtrl.update();
+        updateLabelPositions();
+        renderer.render(scene, camera);
+    })();
+
+    // ── Resize ──
+
+    window.addEventListener('resize', () => {
+        const aspect = innerWidth / innerHeight;
+        camera.left   = -FRUSTUM * aspect / 2;
+        camera.right  =  FRUSTUM * aspect / 2;
+        camera.top    =  FRUSTUM / 2;
+        camera.bottom = -FRUSTUM / 2;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ── Init ──
+    loadPreset(0);
+
+    </script>
+</body>
+</html>
