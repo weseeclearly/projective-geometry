@@ -110,7 +110,7 @@
         <div id="info-body">
             <div id="preset-desc"></div>
             <div id="axiom-desc"></div>
-            <div id="info-hints">drag centers · dbl-click add · right-click remove · pan · scroll zoom</div>
+            <div id="info-hints">drag centers · drag Ω/Ω′ to tilt horizon · dbl-click add · right-click remove · scroll zoom</div>
         </div>
     </div>
 
@@ -128,16 +128,7 @@
             <input type="range" id="c-ns" min="3" max="30" value="14" step="1">
             <span class="val" id="v-ns">14</span>
         </div>
-        <div class="row">
-            <span>base</span>
-            <input type="range" id="c-base" min="-30" max="5" value="-12" step="0.5">
-            <span class="val" id="v-base">-12</span>
-        </div>
-        <div class="row">
-            <span>extent</span>
-            <input type="range" id="c-ext" min="10" max="80" value="35" step="1">
-            <span class="val" id="v-ext">35</span>
-        </div>
+        <!-- base line is now draggable via Ω / Ω′ endpoints -->
         <div class="row">
             <span>bias</span>
             <input type="range" id="c-bias" min="-5" max="5" value="0" step="0.1">
@@ -191,6 +182,7 @@
         </div>
         <div class="row" id="svg-fit-status" style="display:none">
             <span id="fit-status" style="color:#ccaa55; font-size:12px"></span>
+            <span id="c-svg-reset-fit" style="color:#555; cursor:pointer; font-size:12px; margin-left:8px; display:none">reset fit</span>
         </div>
         <div class="row">
             <span id="reset">reset layout</span>
@@ -234,6 +226,38 @@
             if (x > a + 0.001 && x < b - 0.001) pts.push(x);
         }
         return pts;
+    }
+
+    function basePointAt(t, extent) {
+        const [p0, p1] = state.basePts;
+        const f = (t + extent) / (2 * extent);
+        return [p0[0] + f * (p1[0] - p0[0]), p0[1] + f * (p1[1] - p0[1])];
+    }
+
+    function baseMid() {
+        const [p0, p1] = state.basePts;
+        return [(p0[0]+p1[0])/2, (p0[1]+p1[1])/2];
+    }
+
+    function baseLineDir() {
+        const [p0, p1] = state.basePts;
+        const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        return [dx / len, dy / len];
+    }
+
+    function baseLineH() {
+        const [p0, p1] = state.basePts;
+        return cross([p0[0], p0[1], 1], [p1[0], p1[1], 1]);
+    }
+
+    function paramOnBase(px, py, extent) {
+        const [p0, p1] = state.basePts;
+        const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+        const len2 = dx*dx + dy*dy;
+        if (len2 < 1e-10) return 0;
+        const f = ((px - p0[0]) * dx + (py - p0[1]) * dy) / len2;
+        return f * 2 * extent - extent;
     }
 
     // Densify a pencil by linear interpolation in homogeneous line space
@@ -333,7 +357,8 @@
     // ── State ──
 
     const state = {
-        vps: PRESETS[0].vps.map(p => [...p])
+        vps: PRESETS[0].vps.map(p => [...p]),
+        basePts: [[-35, -12], [35, -12]]
     };
 
     // ── Three.js ──
@@ -438,14 +463,15 @@
         axLabel(lc, entries, 'R', R[0], R[1]);
     }
 
-    function drawDesargues(grp, lc, entries, base, baseY) {
-        if (state.vps.length < 3 || base.length < 5) return;
-        const bIdx = [Math.floor(base.length * 0.25), Math.floor(base.length * 0.5), Math.floor(base.length * 0.75)];
+    function drawDesargues(grp, lc, entries, base2D, extent) {
+        if (state.vps.length < 3 || base2D.length < 5) return;
+        const bIdx = [Math.floor(base2D.length * 0.25), Math.floor(base2D.length * 0.5), Math.floor(base2D.length * 0.75)];
         const hV = state.vps.slice(0, 3).map(v => [v[0], v[1], 1]);
 
         const T1 = [], T2 = [];
         for (const bi of bIdx) {
-            const hB = [base[bi], baseY, 1];
+            const [bx, by] = base2D[bi];
+            const hB = [bx, by, 1];
             const p1 = dehom(cross(cross(hV[0], hB), cross(hV[1], hB)));
             const p2 = dehom(cross(cross(hV[0], hB), cross(hV[2], hB)));
             if (!p1 || !p2) return;
@@ -490,30 +516,37 @@
         axLabel(lc, entries, 'O', state.vps[0][0], state.vps[0][1]);
     }
 
-    function drawPascalLine(grp, lc, entries, ratio, baseY, extent) {
+    function drawPascalLine(grp, lc, entries, ratio, extent) {
         if (state.vps.length < 2) return;
         const vpA = state.vps[0], vpB = state.vps[1];
         const ea = -extent, eb = extent, ss = 4;
-        if (Math.abs(vpA[1] - baseY) < 0.1) return;
+        const hBase = baseLineH();
+        const distToBase = Math.abs(hBase[0]*vpA[0] + hBase[1]*vpA[1] + hBase[2]) /
+            Math.sqrt(hBase[0]**2 + hBase[1]**2);
+        if (distToBase < 0.1) return;
 
-        const aR = Math.atan2(baseY - vpA[1], eb - vpA[0]);
-        const aL = Math.atan2(baseY - vpA[1], ea - vpA[0]);
+        const [bp0, bp1] = state.basePts;
+        const aR = Math.atan2(bp1[1] - vpA[1], bp1[0] - vpA[0]);
+        const aL = Math.atan2(bp0[1] - vpA[1], bp0[0] - vpA[0]);
         const cPts = [];
 
         for (let i = 0; i < 6; i++) {
             const frac = 0.1 + 0.8 * i / 5;
             const th = aR + (aL - aR) * frac;
             const st = Math.sin(th), ct = Math.cos(th);
-            if (Math.abs(st) < 1e-10) continue;
-            const xs = vpA[0] + (baseY - vpA[1]) * ct / st;
+            const lS = [st, -ct, ct * vpA[1] - st * vpA[0]];
+            const hitH = cross(lS, hBase);
+            const hit = dehom(hitH);
+            if (!hit) continue;
+            const xs = paramOnBase(hit[0], hit[1], extent);
             const d1 = eb - xs;
             if (Math.abs(d1) < 0.001) continue;
             const ts = (xs - ea) / d1;
             const td = ts * (ratio ** ss);
             if (Math.abs(1 + td) < 1e-8) continue;
             const xd = (ea + eb * td) / (1 + td);
-            const lS = [st, -ct, ct * vpA[1] - st * vpA[0]];
-            const thD = Math.atan2(baseY - vpB[1], xd - vpB[0]);
+            const [bpx, bpy] = basePointAt(xd, extent);
+            const thD = Math.atan2(bpy - vpB[1], bpx - vpB[0]);
             const stD = Math.sin(thD), ctD = Math.cos(thD);
             const lD = [stD, -ctD, ctD * vpB[1] - stD * vpB[0]];
             const p = dehom(cross(lS, lD));
@@ -691,16 +724,17 @@
     function getGridAnchorsFor(vps) {
         const n = vps.length;
         if (n < 2) return null;
-        const baseY = +$('c-base').value;
-        const extent = +$('c-ext').value;
+        const [bp0, bp1] = state.basePts;
+        const extent = Math.sqrt((bp1[0]-bp0[0])**2 + (bp1[1]-bp0[1])**2) / 2;
         const ratio = +$('c-ratio').value;
         const bias = +$('c-bias').value;
         const numSteps = +$('c-ns').value;
-        const base = growthMeasure(-extent, extent, ratio, numSteps, bias);
-        if (base.length < 2) return null;
-        const b0 = base[Math.floor(base.length * 0.25)];
-        const b1 = base[Math.floor(base.length * 0.75)];
-        const hB0 = [b0, baseY, 1], hB1 = [b1, baseY, 1];
+        const baseParams = growthMeasure(-extent, extent, ratio, numSteps, bias);
+        if (baseParams.length < 2) return null;
+        const b0p = baseParams[Math.floor(baseParams.length * 0.25)];
+        const b1p = baseParams[Math.floor(baseParams.length * 0.75)];
+        const bp0_2d = basePointAt(b0p, extent), bp1_2d = basePointAt(b1p, extent);
+        const hB0 = [bp0_2d[0], bp0_2d[1], 1], hB1 = [bp1_2d[0], bp1_2d[1], 1];
         const hV = vps.map(v => [v[0], v[1], 1]);
         const vpL = (vi, hB) => cross(hV[vi], hB);
         const meet = (a, b) => dehom(cross(a, b));
@@ -746,9 +780,9 @@
         }
 
         let H = null;
-        if (svgState.bboxAnchors) {
+        if (svgState.refAnchors) {
             const dst = vpAnchors();
-            if (dst) H = computeHomography(svgState.bboxAnchors, dst);
+            if (dst) H = computeHomography(svgState.refAnchors, dst);
         }
 
         for (const path of svgState.cachedPaths) {
@@ -823,27 +857,34 @@
 
     // ── Projective curve fitting ──
 
-    function sampleSteinerCurve(src, dst, ratio, baseY, extent, ss, count) {
+    function sampleSteinerCurve(src, dst, ratio, extent, ss, count) {
         const ea = -extent, eb = extent;
-        if (Math.abs(src[1] - baseY) < 0.1) return [];
-        const aR = Math.atan2(baseY - src[1], eb - src[0]);
-        const aL = Math.atan2(baseY - src[1], ea - src[0]);
+        const hBase = baseLineH();
+        const distToBase = Math.abs(hBase[0]*src[0] + hBase[1]*src[1] + hBase[2]) /
+            Math.sqrt(hBase[0]**2 + hBase[1]**2);
+        if (distToBase < 0.1) return [];
+        const [bp0, bp1] = state.basePts;
+        const aR = Math.atan2(bp1[1] - src[1], bp1[0] - src[0]);
+        const aL = Math.atan2(bp0[1] - src[1], bp0[0] - src[0]);
         const span = aL - aR;
-        const aRe = aR - span * 1.0, aLe = aL + span * 1.0;
+        const aRe = aR - span * 0.5, aLe = aL + span * 0.5;
         const pts = [];
         for (let i = 0; i < count; i++) {
             const th = aRe + (aLe - aRe) * i / (count - 1);
             const st = Math.sin(th), ct = Math.cos(th);
-            if (Math.abs(st) < 1e-10) continue;
-            const xs = src[0] + (baseY - src[1]) * ct / st;
+            const lS = [st, -ct, ct * src[1] - st * src[0]];
+            const hitH = cross(lS, hBase);
+            const hit = dehom(hitH);
+            if (!hit) continue;
+            const xs = paramOnBase(hit[0], hit[1], extent);
             const d1 = eb - xs;
             if (Math.abs(d1) < 0.001) continue;
             const ts = (xs - ea) / d1;
             const td = ts * (ratio ** ss);
             if (Math.abs(1 + td) < 1e-8) continue;
             const xd = (ea + eb * td) / (1 + td);
-            const lS = [st, -ct, ct * src[1] - st * src[0]];
-            const thD = Math.atan2(baseY - dst[1], xd - dst[0]);
+            const [bpx, bpy] = basePointAt(xd, extent);
+            const thD = Math.atan2(bpy - dst[1], bpx - dst[0]);
             const stD = Math.sin(thD), ctD = Math.cos(thD);
             const lD = [stD, -ctD, ctD * dst[1] - stD * dst[0]];
             const p = dehom(cross(lS, lD));
@@ -866,13 +907,13 @@
         return total / svgPts.length;
     }
 
-    function fitScore(vps, ratio, baseY, extent, shifts, svgPts) {
+    function fitScore(vps, ratio, extent, shifts, svgPts) {
         const allCurve = [];
         for (let i = 0; i < vps.length; i++) {
             for (let j = i + 1; j < vps.length; j++) {
                 for (const ss of shifts) {
                     for (const [src, dst] of [[vps[i], vps[j]], [vps[j], vps[i]]]) {
-                        const pts = sampleSteinerCurve(src, dst, ratio, baseY, extent, ss, 120);
+                        const pts = sampleSteinerCurve(src, dst, ratio, extent, ss, 120);
                         allCurve.push(...pts);
                     }
                 }
@@ -897,8 +938,9 @@
         }
         if (!svgPts.length) { statusEl.textContent = 'no contour points'; return; }
 
-        const baseY = +$('c-base').value;
-        const extent = +$('c-ext').value;
+        const [bp0, bp1] = state.basePts;
+        const baseMidY = (bp0[1] + bp1[1]) / 2;
+        const extent = Math.sqrt((bp1[0]-bp0[0])**2 + (bp1[1]-bp0[1])**2) / 2;
 
         let bestScore = Infinity, bestConfig = null;
         const shiftSets = [
@@ -915,12 +957,12 @@
                     const above = Math.random() > 0.2;
                     vps.push([
                         (Math.random() - 0.5) * 60,
-                        above ? baseY + 3 + Math.random() * 50 : baseY - 3 - Math.random() * 35
+                        above ? baseMidY + 3 + Math.random() * 50 : baseMidY - 3 - Math.random() * 35
                     ]);
                 }
                 for (const ratio of ratios) {
                     for (const shifts of shiftSets) {
-                        const score = fitScore(vps, ratio, baseY, extent, shifts, svgPts);
+                        const score = fitScore(vps, ratio, extent, shifts, svgPts);
                         if (score < bestScore) {
                             bestScore = score;
                             bestConfig = { vps: vps.map(v => [...v]), ratio, shifts: [...shifts], nVps };
@@ -948,7 +990,7 @@
                 ]);
                 const rCand = bestConfig.ratio + (Math.random() - 0.5) * temp * 0.05;
                 if (rCand < 1.05) continue;
-                const score = fitScore(candidate, rCand, baseY, extent, bestConfig.shifts, svgPts);
+                const score = fitScore(candidate, rCand, extent, bestConfig.shifts, svgPts);
                 if (score < bestScore) {
                     bestScore = score;
                     bestConfig.vps = candidate;
@@ -956,7 +998,7 @@
                 }
             }
             for (const shifts of shiftSets) {
-                const score = fitScore(bestConfig.vps, bestConfig.ratio, baseY, extent, shifts, svgPts);
+                const score = fitScore(bestConfig.vps, bestConfig.ratio, extent, shifts, svgPts);
                 if (score < bestScore) {
                     bestScore = score;
                     bestConfig.shifts = [...shifts];
@@ -967,14 +1009,26 @@
         state.vps = bestConfig.vps;
         svgState.fitVps = bestConfig.vps.map(v => [...v]);
         svgState.fitScale = fitScale;
-        svgState.cachedPaths = normalizeSVGPaths(svgState.raw, fitScale);
         svgState.fitted = true;
 
-        const [bx0, by0, bx1, by1] = svgState.raw.bbox;
-        const bw = bx1 - bx0 || 1, bh = by1 - by0 || 1;
-        const bmax = Math.max(bw, bh);
-        const hw = fitScale * bw / (2 * bmax), hh = fitScale * bh / (2 * bmax);
-        svgState.bboxAnchors = [[-hw, hh], [hw, hh], [hw, -hh], [-hw, -hh]];
+        const fitAnchors = vpAnchors();
+        svgState.refAnchors = fitAnchors;
+
+        // Position SVG at VP centroid with uniform scale (no perspective warp)
+        const cx = bestConfig.vps.reduce((s, v) => s + v[0], 0) / bestConfig.vps.length;
+        const cy = bestConfig.vps.reduce((s, v) => s + v[1], 0) / bestConfig.vps.length;
+        let vpSpan = 0;
+        for (let i = 0; i < bestConfig.vps.length; i++)
+            for (let j = i+1; j < bestConfig.vps.length; j++) {
+                const d = Math.sqrt((bestConfig.vps[i][0]-bestConfig.vps[j][0])**2 +
+                                    (bestConfig.vps[i][1]-bestConfig.vps[j][1])**2);
+                if (d > vpSpan) vpSpan = d;
+            }
+        const posScale = (vpSpan || 20) / fitScale * 0.6;
+        const normalized = normalizeSVGPaths(svgState.raw, fitScale);
+        svgState.cachedPaths = normalized.map(path =>
+            path.map(([x, y]) => [x * posScale + cx, y * posScale + cy])
+        );
 
         $('c-ratio').value = bestConfig.ratio;
         $('v-ratio').textContent = Math.abs(bestConfig.ratio - 1.618) < 0.01 ? 'φ' : bestConfig.ratio.toFixed(2);
@@ -1009,9 +1063,8 @@
                       symmetry < 0.7 ? 'moderate asymmetry — the form leans toward one pole' :
                                         'strong asymmetry — one axis dominates';
 
-        const baseY_val = +$('c-base').value;
-        const aboveBase = bestConfig.vps.filter(v => v[1] > baseY_val).length;
-        const belowBase = bestConfig.vps.filter(v => v[1] <= baseY_val).length;
+        const aboveBase = bestConfig.vps.filter(v => v[1] > baseMidY).length;
+        const belowBase = bestConfig.vps.filter(v => v[1] <= baseMidY).length;
         let spatial = aboveBase > 0 && belowBase > 0 ?
             'centers span both sides of the horizon — the form breathes between above and below' :
             aboveBase === nC ? 'all centers above the horizon — the form is drawn upward, peripheral' :
@@ -1026,6 +1079,7 @@
         $('info-arrow').textContent = '▼';
 
         statusEl.textContent = `fit: ${nC} centers, ratio ${r.toFixed(2)}, score ${bestScore.toFixed(1)}`;
+        $('c-svg-reset-fit').style.display = 'inline';
     }
 
     // ── Construction + Rendering ──
@@ -1035,19 +1089,21 @@
 
         const ratio    = +$('c-ratio').value;
         const numSteps = +$('c-ns').value;
-        const baseY    = +$('c-base').value;
-        const extent   = +$('c-ext').value;
         const bias     = +$('c-bias').value;
         const showDiag = $('c-diag').checked;
         const showDots = $('c-dots').checked;
         const netDim   = svgState.raw ? +$('c-net-dim').value : 1;
         $('v-net-dim').textContent = netDim.toFixed(1);
 
+        const [bp0, bp1] = state.basePts;
+        const extent = Math.sqrt((bp1[0]-bp0[0])**2 + (bp1[1]-bp0[1])**2) / 2;
+
         const CLIP = [-400, -250, 400, 250];
         const DIAG_BOUND = 250;
 
-        // Growth-measure base points
-        const base = growthMeasure(-extent, extent, ratio, numSteps, bias);
+        // Growth-measure base points (parameterized along the base line)
+        const baseParams = growthMeasure(-extent, extent, ratio, numSteps, bias);
+        const base2D = baseParams.map(t => basePointAt(t, extent));
 
         // Build pencils from each VP through base points
         const segs = [];
@@ -1055,11 +1111,11 @@
 
         for (const [vx, vy] of state.vps) {
             const hLines = [];
-            for (const bx of base) {
-                const c = clipLine(vx, vy, bx, baseY, ...CLIP);
+            for (const [bx, by] of base2D) {
+                const c = clipLine(vx, vy, bx, by, ...CLIP);
                 if (c) {
                     segs.push(c);
-                    hLines.push(cross([vx, vy, 1], [bx, baseY, 1]));
+                    hLines.push(cross([vx, vy, 1], [bx, by, 1]));
                 }
             }
             pencilH.push(hLines);
@@ -1140,21 +1196,21 @@
         }
 
         // ── Projective curves (Steiner conics via angle-parametric sampling) ──
-        // For each VP pair, uniformly sample angles from the source pencil,
-        // map through the growth-measure projectivity (with a shift), and
-        // intersect with the corresponding line from the destination pencil.
         if ($('c-curves').checked && state.vps.length >= 2) {
             const CN = 500, CX = 1500, CY = 1000;
             const ea = -extent, eb = extent;
+            const hBase = baseLineH();
 
             for (let i = 0; i < state.vps.length; i++) {
                 for (let j = i + 1; j < state.vps.length; j++) {
                     for (const ss of [1.5, 4, 8, 14]) {
                         for (const [src, dst] of [[state.vps[i], state.vps[j]], [state.vps[j], state.vps[i]]]) {
-                            if (Math.abs(src[1] - baseY) < 0.1) continue;
+                            const distToBase = Math.abs(hBase[0]*src[0] + hBase[1]*src[1] + hBase[2]) /
+                                Math.sqrt(hBase[0]**2 + hBase[1]**2);
+                            if (distToBase < 0.1) continue;
 
-                            const aR = Math.atan2(baseY - src[1], eb - src[0]);
-                            const aL = Math.atan2(baseY - src[1], ea - src[0]);
+                            const aR = Math.atan2(bp1[1] - src[1], bp1[0] - src[0]);
+                            const aL = Math.atan2(bp0[1] - src[1], bp0[0] - src[0]);
                             const span = aL - aR;
                             const aRe = aR - span * 1.0;
                             const aLe = aL + span * 1.0;
@@ -1164,9 +1220,13 @@
                             for (let si = 0; si < CN; si++) {
                                 const th = aRe + (aLe - aRe) * si / (CN - 1);
                                 const st = Math.sin(th), ct = Math.cos(th);
-                                if (Math.abs(st) < 1e-10) continue;
 
-                                const xs = src[0] + (baseY - src[1]) * ct / st;
+                                const lS = [st, -ct, ct * src[1] - st * src[0]];
+                                const hitH = cross(lS, hBase);
+                                const hit = dehom(hitH);
+                                if (!hit) continue;
+
+                                const xs = paramOnBase(hit[0], hit[1], extent);
                                 const denom1 = eb - xs;
                                 if (Math.abs(denom1) < 0.001) continue;
 
@@ -1175,8 +1235,8 @@
                                 if (Math.abs(1 + td) < 1e-8) continue;
                                 const xd = (ea + eb * td) / (1 + td);
 
-                                const lS = [st, -ct, ct * src[1] - st * src[0]];
-                                const thD = Math.atan2(baseY - dst[1], xd - dst[0]);
+                                const [bpx, bpy] = basePointAt(xd, extent);
+                                const thD = Math.atan2(bpy - dst[1], bpx - dst[0]);
                                 const stD = Math.sin(thD), ctD = Math.cos(thD);
                                 const lD = [stD, -ctD, ctD * dst[1] - stD * dst[0]];
                                 const p = dehom(cross(lS, lD));
@@ -1224,14 +1284,27 @@
             }
         }
 
-        // ── Base line (faint guide) ──
+        // ── Base line (faint guide, extended through endpoints) ──
         {
+            const dir = baseLineDir();
+            const mid = baseMid();
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.BufferAttribute(
-                new Float32Array([-5000, baseY, 0, 5000, baseY, 0]), 3
+                new Float32Array([
+                    mid[0] - dir[0]*5000, mid[1] - dir[1]*5000, 0,
+                    mid[0] + dir[0]*5000, mid[1] + dir[1]*5000, 0
+                ]), 3
             ));
             group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
                 color: 0xffffff, transparent: true, opacity: 0.08 * netDim
+            })));
+
+            // Endpoint markers
+            const epPos = new Float32Array([bp0[0], bp0[1], 0, bp1[0], bp1[1], 0]);
+            const epGeo = new THREE.BufferGeometry();
+            epGeo.setAttribute('position', new THREE.BufferAttribute(epPos, 3));
+            group.add(new THREE.Points(epGeo, new THREE.PointsMaterial({
+                color: 0x666666, size: 5, sizeAttenuation: false
             })));
         }
 
@@ -1252,8 +1325,6 @@
         // ── Update slider readouts ──
         $('v-ratio').textContent = Math.abs(ratio - 1.618) < 0.01 ? 'φ' : ratio.toFixed(2);
         $('v-ns').textContent = numSteps;
-        $('v-base').textContent = baseY;
-        $('v-ext').textContent = extent;
         $('v-bias').textContent = bias.toFixed(1);
 
         // ── Projective labels ──
@@ -1269,19 +1340,20 @@
                 lc.appendChild(el);
                 labelEntries.push({ el, wx: state.vps[i][0], wy: state.vps[i][1], ox: 9, oy: -16 });
             }
-            // Base line
+            // Base line label (near right endpoint)
             const bl = document.createElement('span');
             bl.className = 'line-label';
             bl.textContent = 'ℓ';
             lc.appendChild(bl);
-            labelEntries.push({ el: bl, wx: extent + 2, wy: baseY, ox: 4, oy: -14 });
+            const dir = baseLineDir();
+            labelEntries.push({ el: bl, wx: bp1[0] + dir[0]*2, wy: bp1[1] + dir[1]*2, ox: 4, oy: -14 });
             // Limit points (the two infinitudes)
-            for (const [sym, lx] of [['Ω', -extent], ['Ω′', extent]]) {
+            for (const [sym, pt] of [['Ω', bp0], ['Ω′', bp1]]) {
                 const lp = document.createElement('span');
                 lp.className = 'line-label';
                 lp.textContent = sym;
                 lc.appendChild(lp);
-                labelEntries.push({ el: lp, wx: lx, wy: baseY, ox: -4, oy: 8 });
+                labelEntries.push({ el: lp, wx: pt[0], wy: pt[1], ox: -4, oy: 8 });
             }
         }
 
@@ -1289,16 +1361,17 @@
         const axiom = $('c-axiom').value;
         $('axiom-desc').textContent = AXIOM_DESCS[axiom] || '';
         if (axiom === 'harmonic') drawHarmonicSet(group, lc, labelEntries);
-        else if (axiom === 'desargues') drawDesargues(group, lc, labelEntries, base, baseY);
-        else if (axiom === 'pascal') drawPascalLine(group, lc, labelEntries, ratio, baseY, extent);
+        else if (axiom === 'desargues') drawDesargues(group, lc, labelEntries, base2D, extent);
+        else if (axiom === 'pascal') drawPascalLine(group, lc, labelEntries, ratio, extent);
     }
 
-    // ── Interaction: drag VPs ──
+    // ── Interaction: drag VPs and base endpoints ──
 
     const zPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     const raycaster = new THREE.Raycaster();
     const mouseNDC = new THREE.Vector2();
     let dragIndex = -1;
+    let dragBaseIdx = -1;
 
     function mouseToWorld(ex, ey) {
         mouseNDC.set((ex / innerWidth) * 2 - 1, -(ey / innerHeight) * 2 + 1);
@@ -1315,18 +1388,36 @@
             const sx = (v.x + 1) / 2 * innerWidth;
             const sy = (-v.y + 1) / 2 * innerHeight;
             const dx = sx - ex, dy = sy - ey;
-            if (dx * dx + dy * dy < 300) return i; // ~17px hit radius
+            if (dx * dx + dy * dy < 300) return i;
         }
         return -1;
     }
 
-    // Capture-phase pointerdown intercepts before OrbitControls
+    function hitTestBase(ex, ey) {
+        for (let i = 0; i < 2; i++) {
+            const v = new THREE.Vector3(state.basePts[i][0], state.basePts[i][1], 0).project(camera);
+            const sx = (v.x + 1) / 2 * innerWidth;
+            const sy = (-v.y + 1) / 2 * innerHeight;
+            const dx = sx - ex, dy = sy - ey;
+            if (dx * dx + dy * dy < 400) return i;
+        }
+        return -1;
+    }
+
     renderer.domElement.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
-        const hit = hitTestVPs(e.clientX, e.clientY);
-        if (hit >= 0) {
+        const hitVP = hitTestVPs(e.clientX, e.clientY);
+        if (hitVP >= 0) {
             e.stopPropagation();
-            dragIndex = hit;
+            dragIndex = hitVP;
+            orbitCtrl.enabled = false;
+            renderer.domElement.style.cursor = 'grabbing';
+            return;
+        }
+        const hitBase = hitTestBase(e.clientX, e.clientY);
+        if (hitBase >= 0) {
+            e.stopPropagation();
+            dragBaseIdx = hitBase;
             orbitCtrl.enabled = false;
             renderer.domElement.style.cursor = 'grabbing';
         }
@@ -1339,15 +1430,23 @@
                 state.vps[dragIndex] = [pos.x, pos.y];
                 rebuild();
             }
+        } else if (dragBaseIdx >= 0) {
+            const pos = mouseToWorld(e.clientX, e.clientY);
+            if (pos) {
+                state.basePts[dragBaseIdx] = [pos.x, pos.y];
+                rebuild();
+            }
         } else {
-            const hit = hitTestVPs(e.clientX, e.clientY);
-            renderer.domElement.style.cursor = hit >= 0 ? 'grab' : '';
+            const hitVP = hitTestVPs(e.clientX, e.clientY);
+            const hitBase = hitTestBase(e.clientX, e.clientY);
+            renderer.domElement.style.cursor = (hitVP >= 0 || hitBase >= 0) ? 'grab' : '';
         }
     });
 
     window.addEventListener('pointerup', () => {
-        if (dragIndex >= 0) {
+        if (dragIndex >= 0 || dragBaseIdx >= 0) {
             dragIndex = -1;
+            dragBaseIdx = -1;
             orbitCtrl.enabled = true;
             renderer.domElement.style.cursor = '';
         }
@@ -1387,10 +1486,9 @@
     function loadPreset(idx) {
         const p = PRESETS[idx];
         state.vps = p.vps.map(v => [...v]);
+        state.basePts = [[-p.extent, p.base], [p.extent, p.base]];
         $('c-ratio').value = p.ratio;
         $('c-ns').value = p.steps;
-        $('c-base').value = p.base;
-        $('c-ext').value = p.extent;
         $('c-bias').value = p.bias;
         $('c-diag').checked = p.diag;
         $('c-dots').checked = p.dots;
@@ -1409,6 +1507,13 @@
         input.addEventListener('input', rebuild);
 
     $('c-axiom').addEventListener('change', rebuild);
+
+    $('c-svg-reset-fit').addEventListener('click', () => {
+        if (svgState.fitVps) {
+            state.vps = svgState.fitVps.map(v => [...v]);
+            rebuild();
+        }
+    });
 
     $('c-svg-fit').addEventListener('click', autoFitSVG);
 
